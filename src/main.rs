@@ -1,3 +1,8 @@
+use std::io;
+
 fn main() {
-    println!("Hello, world!");
+    let stdin = io::stdin();
+    let mut buf = String::new();
+    stdin.read_line(&mut buf).unwrap();
+    println!("Your message {}", buf);
 }
