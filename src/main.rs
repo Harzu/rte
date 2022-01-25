@@ -1,8 +1,10 @@
-use std::io;
+use std::io::{self, Read};
 
 fn main() {
     let stdin = io::stdin();
-    let mut buf = String::new();
-    stdin.read_line(&mut buf).unwrap();
-    println!("Your message {}", buf);
+    let bytes_iter = stdin.bytes();
+    for byte in bytes_iter {
+        let byte = byte.unwrap();
+        println!("{} {}", byte as char, byte);
+    }
 }
