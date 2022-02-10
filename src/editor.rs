@@ -12,10 +12,17 @@ struct ScreenSize {
     height: u16,
 }
 
+#[derive(Default)]
+struct Position {
+    x: u16,
+    y: u16,
+}
+
 pub struct Editor {
     exit: bool,
     stdout: RawTerminal<Stdout>,
     screen_size: ScreenSize,
+    cursor_position: Position,
 }
 
 impl Editor {
@@ -26,6 +33,7 @@ impl Editor {
             exit: false,
             stdout: io::stdout().into_raw_mode()?,
             screen_size: ScreenSize { width, height },
+            cursor_position: Position::default(),
         })
     }
 
@@ -40,6 +48,7 @@ impl Editor {
 
     fn render(&mut self) -> Result<(), io::Error> {
         for row_num in 0..self.screen_size.height {
+            print!("{}", termion::clear::CurrentLine);
             if row_num == self.screen_size.height / 2 {
                 let message = "Hello from rust-text-editor";
                 let padding = " ".repeat(
@@ -52,6 +61,11 @@ impl Editor {
             }
         }
 
+        print!("{}", termion::cursor::Goto(
+            self.cursor_position.x.saturating_add(1),
+            self.cursor_position.y.saturating_add(1),
+        ));
+
         self.stdout.flush()
     }
 
@@ -59,6 +73,22 @@ impl Editor {
         match self.next_key()? {
             Key::Ctrl(EXIT_CHARACTER) => { self.exit = true; },
             Key::Char(c) => { println!("your input: {}\r", c); },
+            Key::Up => {
+                self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
+            },
+            Key::Down => {
+                if self.cursor_position.y < self.screen_size.height - 1 {
+                    self.cursor_position.y = self.cursor_position.y.saturating_add(1);
+                }
+            },
+            Key::Left => {
+                self.cursor_position.x = self.cursor_position.x.saturating_sub(1);
+            },
+            Key::Right => {
+                if self.cursor_position.x < self.screen_size.width - 1 {
+                    self.cursor_position.x = self.cursor_position.x.saturating_add(1);
+                }
+            },
             _ => ()
         }
 
