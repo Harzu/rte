@@ -1,11 +1,19 @@
-use std::io::{self, Stdout, Write};
+use std::{
+    fmt::{self, format},
+    io::{self, Stdout, Write},
+};
 use termion::{
+    color,
     event::Key,
     input::TermRead,
     raw::{RawTerminal, IntoRawMode}
 };
 
 const EXIT_CHARACTER: char = 'q';
+const PADDING_BUTTOM: u16 = 2;
+const INFO_MESSAGE: &str = "CTRL-Q = exit";
+const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
+const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
 
 struct ScreenSize {
     width: u16,
@@ -16,6 +24,12 @@ struct ScreenSize {
 struct Position {
     x: u16,
     y: u16,
+}
+
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}|{})", self.x, self.y)
+    }
 }
 
 pub struct Editor {
@@ -32,7 +46,7 @@ impl Editor {
         Ok(Editor {
             exit: false,
             stdout: io::stdout().into_raw_mode()?,
-            screen_size: ScreenSize { width, height },
+            screen_size: ScreenSize { width, height: height.saturating_sub(PADDING_BUTTOM) },
             cursor_position: Position::default(),
         })
     }
@@ -47,6 +61,20 @@ impl Editor {
     }
 
     fn render(&mut self) -> Result<(), io::Error> {
+        print!("{}", termion::cursor::Goto::default());
+
+        self.render_rows();
+        self.render_status_bar();
+
+        print!("{}", termion::cursor::Goto(
+            self.cursor_position.x.saturating_add(1),
+            self.cursor_position.y.saturating_add(1),
+        ));
+
+        self.stdout.flush()
+    }
+
+    fn render_rows(&self) {
         for row_num in 0..self.screen_size.height {
             print!("{}", termion::clear::CurrentLine);
             if row_num == self.screen_size.height / 2 {
@@ -60,13 +88,23 @@ impl Editor {
                 println!("~\r");
             }
         }
+    }
 
-        print!("{}", termion::cursor::Goto(
-            self.cursor_position.x.saturating_add(1),
-            self.cursor_position.y.saturating_add(1),
-        ));
+    fn render_status_bar(&self) {
+        print!("{}", termion::clear::CurrentLine);
 
-        self.stdout.flush()
+        let status_message = format!("cursor {}", self.cursor_position);
+        let end_spaces = " ".repeat(
+            self.screen_size.width.saturating_sub(status_message.len() as u16) as usize
+        );
+        let status = format!("{}{}", status_message, end_spaces);
+
+        print!("{}{}", color::Bg(STATUS_BG_COLOR), color::Fg(STATUS_FG_COLOR));
+        println!("{}\r", status);
+        print!("{}{}", color::Bg(color::Reset), color::Fg(color::Reset));
+
+        print!("{}", termion::clear::CurrentLine);
+        print!("{}\r", String::from(INFO_MESSAGE));
     }
 
     fn process_key(&mut self) -> Result<(), io::Error> {
