@@ -1,13 +1,15 @@
-use std::{
-    fmt::{self, format},
-    io::{self, Stdout, Write},
-};
+use std::{fmt, cmp};
+use std::io::{self, Stdout, Write};
 use termion::{
     color,
     event::Key,
     input::TermRead,
     raw::{RawTerminal, IntoRawMode}
 };
+
+use crate::Document;
+
+pub const NEW_LINE_CHARACTER: char = '\n';
 
 const EXIT_CHARACTER: char = 'q';
 const PADDING_BUTTOM: u16 = 2;
@@ -22,8 +24,8 @@ struct ScreenSize {
 
 #[derive(Default)]
 struct Position {
-    x: u16,
-    y: u16,
+    x: usize,
+    y: usize,
 }
 
 impl fmt::Display for Position {
@@ -35,19 +37,23 @@ impl fmt::Display for Position {
 pub struct Editor {
     exit: bool,
     stdout: RawTerminal<Stdout>,
+    document: Document,
     screen_size: ScreenSize,
     cursor_position: Position,
+    screen_offset: Position,
 }
 
 impl Editor {
-    pub fn new() -> Result<Self, io::Error> {
+    pub fn new(document: Document) -> Result<Self, io::Error> {
         let (width, height) = termion::terminal_size()?;
         
         Ok(Editor {
             exit: false,
             stdout: io::stdout().into_raw_mode()?,
+            document: document,
             screen_size: ScreenSize { width, height: height.saturating_sub(PADDING_BUTTOM) },
             cursor_position: Position::default(),
+            screen_offset: Position::default(),
         })
     }
 
@@ -67,8 +73,8 @@ impl Editor {
         self.render_status_bar();
 
         print!("{}", termion::cursor::Goto(
-            self.cursor_position.x.saturating_add(1),
-            self.cursor_position.y.saturating_add(1),
+            self.cursor_position.x.saturating_sub(self.screen_offset.x).saturating_add(1) as u16,
+            self.cursor_position.y.saturating_sub(self.screen_offset.y).saturating_add(1) as u16,
         ));
 
         self.stdout.flush()
@@ -77,23 +83,39 @@ impl Editor {
     fn render_rows(&self) {
         for row_num in 0..self.screen_size.height {
             print!("{}", termion::clear::CurrentLine);
-            if row_num == self.screen_size.height / 2 {
-                let message = "Hello from rust-text-editor";
-                let padding = " ".repeat(
-                    (self.screen_size.width / 2 + 1) as usize - message.len() / 2
-                );
-
-                println!("~{}{}\r", padding, message);
+            if let Some(row) = self.document.rows.get(self.screen_offset.y.saturating_add(row_num  as usize)) {
+                self.render_row(row);
             } else {
-                println!("~\r");
+                println!("\r");
             }
         }
+    }
+
+    fn render_row(&self, row: &String) {
+        let mut start = self.screen_offset.x;
+        let mut end = start.saturating_add(self.screen_size.width as usize);
+
+        end = cmp::min(end, row.len());
+        start = cmp::min(start, end);
+
+        let render: String = row
+            .chars()
+            .into_iter()
+            .skip(start as usize)
+            .take((end - start) as usize)
+            .collect();
+
+        println!("{}\r", render)
     }
 
     fn render_status_bar(&self) {
         print!("{}", termion::clear::CurrentLine);
 
-        let status_message = format!("cursor {}", self.cursor_position);
+        let status_message = format!(
+            "cursor {} | offset {}",
+            self.cursor_position,
+            self.screen_offset,
+        );
         let end_spaces = " ".repeat(
             self.screen_size.width.saturating_sub(status_message.len() as u16) as usize
         );
@@ -111,26 +133,61 @@ impl Editor {
         match self.next_key()? {
             Key::Ctrl(EXIT_CHARACTER) => { self.exit = true; },
             Key::Char(c) => { println!("your input: {}\r", c); },
-            Key::Up => {
-                self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
-            },
-            Key::Down => {
-                if self.cursor_position.y < self.screen_size.height - 1 {
-                    self.cursor_position.y = self.cursor_position.y.saturating_add(1);
-                }
-            },
-            Key::Left => {
-                self.cursor_position.x = self.cursor_position.x.saturating_sub(1);
-            },
-            Key::Right => {
-                if self.cursor_position.x < self.screen_size.width - 1 {
-                    self.cursor_position.x = self.cursor_position.x.saturating_add(1);
-                }
-            },
+            Key::Up => self.move_up(),
+            Key::Down => self.move_down(),
+            Key::Left => self.move_left(),
+            Key::Right => self.move_right(),
             _ => ()
         }
 
+        self.scroll_verical();
+        self.scroll_horizontal();
+
         Ok(())
+    }
+
+    fn move_up(&mut self) {
+        self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
+    }
+
+    fn move_down(&mut self) {
+        if self.cursor_position.y < self.document.rows.len() - 1 {
+            self.cursor_position.y = self.cursor_position.y.saturating_add(1);
+        }
+    }
+
+    fn move_left(&mut self) {
+        self.cursor_position.x = self.cursor_position.x.saturating_sub(1);
+    }
+
+    fn move_right(&mut self) {
+        if let Some(row) = self.document.rows.get(self.cursor_position.y) {
+            if self.cursor_position.x < row.len() {
+                self.cursor_position.x = self.cursor_position.x.saturating_add(1);
+            }
+        }
+    }
+
+    fn scroll_verical(&mut self) {
+        let height = self.screen_size.height as usize;
+        if self.cursor_position.y < self.screen_offset.y {
+            self.screen_offset.y = self.cursor_position.y
+        } else if self.cursor_position.y >= self.screen_offset.y.saturating_add(height) {
+            self.screen_offset.y = self.cursor_position.y
+                .saturating_sub(height)
+                .saturating_add(1)
+        }
+    }
+
+    fn scroll_horizontal(&mut self) {
+        let width = self.screen_size.width as usize;
+        if self.cursor_position.x < self.screen_offset.x {
+            self.screen_offset.x = self.cursor_position.x
+        } else if self.cursor_position.x >= self.screen_offset.x.saturating_add(width) {
+            self.screen_offset.x = self.cursor_position.x
+                .saturating_sub(width)
+                .saturating_add(1)
+        }
     }
 
     fn next_key(&self) -> Result<Key, io::Error> {
