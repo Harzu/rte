@@ -1,12 +1,13 @@
-use std::fs::File;
-use std::path::Path;
-use std::io::{prelude::*, BufReader, LineWriter};
-
+use std::{
+    fs::File,
+    path::Path,
+    io::{prelude::*, BufReader, LineWriter}
+};
 use crate::editor::NEW_LINE_CHARACTER;
 
 pub struct Document {
     pub rows: Vec<String>,
-    _file_path: String,
+    file_path: String,
 }
 
 impl Document {
@@ -27,18 +28,18 @@ impl Document {
             },
         };
 
-        if document_rows.len() == 0 {
+        if document_rows.is_empty(){
             document_rows.push(String::new());
         }
 
         Ok(Self{
             rows: document_rows,
-            _file_path: file_path.to_string(),
+            file_path: file_path.to_string(),
         })
     }
 
     pub fn save(&self) -> Result<(), std::io::Error> {
-        let file = File::create(&self._file_path.to_string())?;
+        let file = File::create(&self.file_path)?;
         let mut file = LineWriter::new(file);
 
         for (index, row) in self.rows.iter().enumerate() {
