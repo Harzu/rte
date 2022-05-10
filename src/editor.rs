@@ -31,6 +31,7 @@ impl fmt::Display for Position {
 }
 
 pub struct Editor {
+    close: bool,
     terminal: Terminal,
     document: Document,
     screen_size: ScreenSize,
@@ -43,12 +44,17 @@ impl Editor {
         let (width, height) = termion::terminal_size()?;
         
         Ok(Editor {
+            close: false,
             terminal,
             document,
             screen_size: ScreenSize { width, height: height.saturating_sub(PADDING_BUTTOM) },
             cursor_position: Position::default(),
             screen_offset: Position::default(),
         })
+    }
+
+    pub fn is_close(&self) -> bool {
+        self.close
     }
 
     pub fn resize(&mut self) -> Result<(), io::Error> {
@@ -125,14 +131,9 @@ impl Editor {
         print!("{}\r", String::from(INFO_MESSAGE));
     }
 
-    pub fn process_key<F: FnOnce()>(
-        &mut self,
-        key: Key,
-        exit_func: F
-    ) -> Result<(), Box<dyn error::Error + Send + Sync>>
-    {
+    pub fn process_key(&mut self, key: Key) -> Result<(), io::Error> {
         match key {
-            Key::Ctrl(EXIT_CHARACTER) => exit_func(),
+            Key::Ctrl(EXIT_CHARACTER) => { self.close = true; },
             Key::Ctrl(SAVE_CHARACTER) => self.document.save()?,
             Key::Char(c) => self.add_char(c),
             Key::Backspace => self.remove_char(),

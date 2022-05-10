@@ -1,14 +1,18 @@
 use std::{
-    thread,
+    thread, io,
     error::Error,
     time::Duration,
 };
+use libc::c_int;
 use termion::event::Key;
 use crossbeam::channel::{
-    unbounded,
-    select,
-    tick,
-    Receiver, Sender
+    unbounded, select,
+    Receiver, Sender,
+};
+#[cfg(not(feature = "extended-siginfo"))]
+use signal_hook::{
+    consts::signal::SIGWINCH,
+    iterator::Signals,
 };
 use crate::{Terminal, Editor};
 
@@ -18,51 +22,48 @@ pub struct EventLoop {
 
 struct Signal;
 
+type SignalChan = (Sender<Signal>, Receiver<Signal>);
+type KeyChan = (Sender<Key>, Receiver<Key>);
+type IOErrorChan = (Sender<io::Error>, Receiver<io::Error>);
+
 impl EventLoop {
+
     pub fn new(editor: Editor) -> Self {
         EventLoop {
             editor
         }
     }
 
-    pub fn run(&mut self) -> Result<(), Box<dyn Error + Sync + Send>> {
-        let (
-            close_tx, close_rx,
-        ): (Sender<Signal>, Receiver<Signal>) = unbounded();
-        let (
-            key_getter_close_tx, key_getter_close_rx,
-        ): (Sender<Signal>, Receiver<Signal>) = (close_tx.clone(), close_rx.clone());
-        let (
-            render_tx, render_rx,
-        ): (Sender<Signal>, Receiver<Signal>) = unbounded();
-        let (
-            next_key_signal_tx, next_key_signal_rx,
-        ): (Sender<Signal>, Receiver<Signal>) = unbounded();
-        let (
-            key_tx, key_rx,
-        ): (Sender<Key>, Receiver<Key>) = unbounded();
-        
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        const SIGNALS: &[c_int] = &[SIGWINCH];
+        let mut sigs = Signals::new(SIGNALS)?;
+
+        let (close_tx, close_rx): SignalChan = unbounded();
+        let (key_getter_close_tx, key_getter_close_rx): SignalChan = unbounded();
+        let (render_tx, render_rx): SignalChan = unbounded();
+        let (next_key_signal_tx, next_key_signal_rx): SignalChan = unbounded();
+        let (key_tx, key_rx): KeyChan = unbounded();
+        let (io_error_tx, io_error_rx): IOErrorChan = unbounded();
+
         let key_getter_thread = thread::spawn(
             move || {
                 loop {
                     select! {
                         recv(key_getter_close_rx) -> _ => break,
                         recv(next_key_signal_rx) -> _ => {
-                            let key = Terminal::get_key()?;
-                            key_tx.send(key)?;
-                        }
+                            match Terminal::get_key() {
+                                Ok(key) => { key_tx.send(key).unwrap(); },
+                                Err(err) => { io_error_tx.send(err).unwrap(); }, 
+                            }
+                        },
                     }
                 }
-    
-                Ok(())
             }
         );
 
-        let ticker = tick(Duration::from_millis(100));
-
         render_tx.send(Signal)?;
         next_key_signal_tx.send(Signal)?;
-
+        
         loop {
             select! {
                 recv(close_rx) -> _ => break,
@@ -71,23 +72,33 @@ impl EventLoop {
                     self.editor.render()?;
                 },
                 recv(key_rx) -> key => {
-                    self.editor.process_key(
-                        key?,
-                        || {
-                            key_getter_close_tx.send(Signal).unwrap();
-                            close_tx.send(Signal).unwrap();
-                        },
-                    )?;
-                    render_tx.send(Signal)?;
-                    next_key_signal_tx.send(Signal)?;
+                    self.editor.process_key(key?)?;
+
+                    if self.editor.is_close() {
+                        key_getter_close_tx.send(Signal)?;
+                        close_tx.send(Signal)?;
+                    } else {
+                        render_tx.send(Signal)?;
+                        next_key_signal_tx.send(Signal)?;
+                    }
                 },
-                recv(ticker) -> _ => {
-                    self.editor.resize()?;
-                    render_tx.send(Signal)?;
-                },
+                recv(io_error_rx) -> _ => {
+                    key_getter_close_tx.send(Signal)?;
+                    close_tx.send(Signal)?;
+                }
+                default(Duration::from_millis(100)) => {
+                    if sigs.pending().next().is_some() {
+                        self.editor.resize()?;
+                        render_tx.send(Signal)?; 
+                    }
+                }
             };            
         }
 
-        key_getter_thread.join().unwrap()
+        key_getter_thread
+            .join()
+            .unwrap();
+        
+        Ok(())
     }
 }
