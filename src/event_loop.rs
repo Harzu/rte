@@ -27,7 +27,6 @@ type KeyChan = (Sender<Key>, Receiver<Key>);
 type IOErrorChan = (Sender<io::Error>, Receiver<io::Error>);
 
 impl EventLoop {
-
     pub fn new(editor: Editor) -> Self {
         EventLoop {
             editor
@@ -39,7 +38,6 @@ impl EventLoop {
         let mut sigs = Signals::new(SIGNALS)?;
 
         let (close_tx, close_rx): SignalChan = unbounded();
-        let (key_getter_close_tx, key_getter_close_rx): SignalChan = unbounded();
         let (render_tx, render_rx): SignalChan = unbounded();
         let (next_key_signal_tx, next_key_signal_rx): SignalChan = unbounded();
         let (key_tx, key_rx): KeyChan = unbounded();
@@ -49,7 +47,7 @@ impl EventLoop {
             move || {
                 loop {
                     select! {
-                        recv(key_getter_close_rx) -> _ => break,
+                        recv(close_rx) -> _ => break,
                         recv(next_key_signal_rx) -> _ => {
                             match Terminal::get_key() {
                                 Ok(key) => { key_tx.send(key).unwrap(); },
@@ -66,7 +64,6 @@ impl EventLoop {
         
         loop {
             select! {
-                recv(close_rx) -> _ => break,
                 recv(render_rx) -> _ => {
                     self.editor.change_offsets();
                     self.editor.render()?;
@@ -75,16 +72,16 @@ impl EventLoop {
                     self.editor.process_key(key?)?;
 
                     if self.editor.is_close() {
-                        key_getter_close_tx.send(Signal)?;
                         close_tx.send(Signal)?;
-                    } else {
-                        render_tx.send(Signal)?;
-                        next_key_signal_tx.send(Signal)?;
+                        break;
                     }
+                    
+                    render_tx.send(Signal)?;
+                    next_key_signal_tx.send(Signal)?;
                 },
                 recv(io_error_rx) -> _ => {
-                    key_getter_close_tx.send(Signal)?;
                     close_tx.send(Signal)?;
+                    break;
                 }
                 default(Duration::from_millis(100)) => {
                     if sigs.pending().next().is_some() {

@@ -1,4 +1,4 @@
-use std::{fmt, io, cmp, error};
+use std::{fmt, io, cmp};
 use termion::{color, event::Key};
 use crate::{Terminal, Document};
 
