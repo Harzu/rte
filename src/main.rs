@@ -2,11 +2,14 @@
 #![allow(
     clippy::missing_docs_in_private_items,
     clippy::cast_possible_truncation,
+    clippy::single_match,
 )]
 
 mod editor;
+mod search;
 mod terminal;
 mod document;
+mod constants;
 mod event_loop;
 
 use clap::{Command, Arg};

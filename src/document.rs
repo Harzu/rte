@@ -3,11 +3,11 @@ use std::{
     path::Path,
     io::{prelude::*, BufReader, LineWriter}
 };
-use crate::editor::NEW_LINE_CHARACTER;
+use crate::constants::NEW_LINE_CHARACTER;
 
 pub struct Document {
     pub rows: Vec<String>,
-    file_path: String,
+    pub file_path: String,
 }
 
 impl Document {

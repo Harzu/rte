@@ -1,13 +1,17 @@
 use std::{fmt, io, cmp};
 use termion::{color, event::Key};
-use crate::{Terminal, Document};
-
-pub const NEW_LINE_CHARACTER: char = '\n';
+use crate::{
+    Terminal,
+    Document,
+    search::SearchEngine,
+    constants::NEW_LINE_CHARACTER,
+};
 
 const EXIT_CHARACTER: char = 'q';
 const SAVE_CHARACTER: char = 's';
+const SEARCH_CHARACTER: char = 'f';
 const PADDING_BUTTOM: u16 = 2;
-const INFO_MESSAGE: &str = "CTRL-Q = exit | CTRL-S = save";
+const INFO_MESSAGE: &str = "CTRL-Q = exit | CTRL-S = save | CTRL-F = search";
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
 const DEFAULT_X_POSITION: usize = usize::MIN;
@@ -30,8 +34,15 @@ impl fmt::Display for Position {
     }
 }
 
+enum EditorMode {
+    Input,
+    Search,
+    Close
+}
+
 pub struct Editor {
-    close: bool,
+    mode: EditorMode,
+    search_engine: SearchEngine,
     terminal: Terminal,
     document: Document,
     screen_size: ScreenSize,
@@ -44,7 +55,8 @@ impl Editor {
         let (width, height) = termion::terminal_size()?;
         
         Ok(Editor {
-            close: false,
+            mode: EditorMode::Input,
+            search_engine: SearchEngine::default(),
             terminal,
             document,
             screen_size: ScreenSize { width, height: height.saturating_sub(PADDING_BUTTOM) },
@@ -54,7 +66,7 @@ impl Editor {
     }
 
     pub fn is_close(&self) -> bool {
-        self.close
+        matches!(self.mode, EditorMode::Close)
     }
 
     pub fn resize(&mut self) -> Result<(), io::Error> {
@@ -113,36 +125,70 @@ impl Editor {
     fn render_status_bar(&self) {
         print!("{}", termion::clear::CurrentLine);
 
-        let status_message = format!(
-            "cursor {} | offset {}",
-            self.cursor_position,
-            self.screen_offset,
-        );
-        let end_spaces = " ".repeat(
-            self.screen_size.width.saturating_sub(status_message.len() as u16) as usize
-        );
-        let status = format!("{}{}", status_message, end_spaces);
-
         print!("{}{}", color::Bg(STATUS_BG_COLOR), color::Fg(STATUS_FG_COLOR));
-        println!("{}\r", status);
+        println!("{}\r", self.build_status_bar());
         print!("{}{}", color::Bg(color::Reset), color::Fg(color::Reset));
 
         print!("{}", termion::clear::CurrentLine);
         print!("{}\r", String::from(INFO_MESSAGE));
     }
 
-    pub fn process_key(&mut self, key: Key) -> Result<(), io::Error> {
-        match key {
-            Key::Ctrl(EXIT_CHARACTER) => { self.close = true; },
-            Key::Ctrl(SAVE_CHARACTER) => self.document.save()?,
-            Key::Char(c) => self.add_char(c),
-            Key::Backspace => self.remove_char(),
-            Key::Up => self.move_up(),
-            Key::Down => self.move_down(),
-            Key::Left => self.move_left(),
-            Key::Right => self.move_right(),
-            _ => ()
+    fn build_status_bar(&self) -> String {
+        match self.mode {
+            EditorMode::Close |
+            EditorMode::Input => {
+                let status_message = format!(
+                    "{} cursor {} | offset {}",
+                    self.document.file_path,
+                    self.cursor_position,
+                    self.screen_offset,
+                );
+                let end_spaces = " ".repeat(
+                    self.screen_size.width.saturating_sub(status_message.len() as u16) as usize
+                );
+        
+                format!("{}{}", status_message, end_spaces)
+            },
+            EditorMode::Search => {
+                let status_message = format!(
+                    "query: {}",
+                    self.search_engine.query,
+                );
+
+                let end_spaces = " ".repeat(
+                    self.screen_size.width.saturating_sub(status_message.len() as u16) as usize
+                );
+
+                format!("{}{}", status_message, end_spaces)
+            },
         }
+    }
+
+    pub fn process_key(&mut self, key: Key) -> Result<(), io::Error> {
+        match self.mode {
+            EditorMode::Search => match key {
+                Key::Esc => {
+                    self.search_engine.clear_query();
+                    self.mode = EditorMode::Input;
+                },
+                Key::Char(c) => self.search_engine.add_char_to_query(c),
+                Key::Backspace => self.search_engine.remove_char_to_query(),
+                _ => ()
+            },
+            EditorMode::Input => match key {
+                Key::Ctrl(EXIT_CHARACTER) => { self.mode = EditorMode::Close; },
+                Key::Ctrl(SAVE_CHARACTER) => self.document.save()?,
+                Key::Ctrl(SEARCH_CHARACTER) => { self.mode = EditorMode::Search; },
+                Key::Char(c) => self.add_char(c),
+                Key::Backspace => self.remove_char(),
+                Key::Up => self.move_up(),
+                Key::Down => self.move_down(),
+                Key::Left => self.move_left(),
+                Key::Right => self.move_right(),
+                _ => ()
+            },
+            EditorMode::Close => ()
+        };
 
         Ok(())
     }
