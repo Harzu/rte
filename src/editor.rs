@@ -16,7 +16,8 @@ const PADDING_BUTTOM: u16 = 2;
 const INFO_MESSAGE: &str = "CTRL-Q = exit";
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
-
+const DEFAULT_X_POSITION: usize = usize::MIN;
+const DEFAULT_Y_POSITION: usize = usize::MIN;
 struct ScreenSize {
     width: u16,
     height: u16,
@@ -24,8 +25,8 @@ struct ScreenSize {
 
 #[derive(Default)]
 struct Position {
-    x: u16,
-    y: u16,
+    x: usize,
+    y: usize,
 }
 
 impl fmt::Display for Position {
@@ -71,8 +72,8 @@ impl Editor {
         self.render_status_bar();
 
         print!("{}", termion::cursor::Goto(
-            self.cursor_position.x.saturating_add(1),
-            self.cursor_position.y.saturating_add(1),
+            self.cursor_position.x.saturating_add(1) as u16,
+            self.cursor_position.y.saturating_add(1) as u16,
         ));
 
         self.stdout.flush()
@@ -110,26 +111,52 @@ impl Editor {
         match self.next_key()? {
             Key::Ctrl(EXIT_CHARACTER) => { self.exit = true; },
             Key::Char(c) => { println!("your input: {}\r", c); },
-            Key::Up => {
-                self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
-            },
-            Key::Down => {
-                if self.cursor_position.y < self.screen_size.height - 1 {
-                    self.cursor_position.y = self.cursor_position.y.saturating_add(1);
-                }
-            },
-            Key::Left => {
-                self.cursor_position.x = self.cursor_position.x.saturating_sub(1);
-            },
-            Key::Right => {
-                if self.cursor_position.x < self.screen_size.width - 1 {
-                    self.cursor_position.x = self.cursor_position.x.saturating_add(1);
-                }
-            },
+            Key::Up => self.move_up(),
+            Key::Down => self.move_down(),
+            Key::Left => self.move_left(),
+            Key::Right => self.move_right(),
             _ => ()
         }
 
         Ok(())
+    }
+
+    fn move_up(&mut self) {
+        self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
+
+        let row_len = self.document.rows[self.cursor_position.y].len();
+        if self.cursor_position.x > row_len {
+            self.cursor_position.x = row_len;
+        }
+    }
+
+    fn move_down(&mut self) {
+        if self.cursor_position.y < self.document.rows.len() - 1 {
+            self.cursor_position.y = self.cursor_position.y.saturating_add(1);
+
+            let row_len = self.document.rows[self.cursor_position.y].len();
+            if self.cursor_position.x > row_len {
+                self.cursor_position.x = row_len;
+            }
+        }
+    }
+
+    fn move_left(&mut self) {
+        if self.cursor_position.x == DEFAULT_X_POSITION && self.cursor_position.y != DEFAULT_Y_POSITION {
+            self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
+            self.cursor_position.x = self.document.rows[self.cursor_position.y].len();
+        } else {
+            self.cursor_position.x = self.cursor_position.x.saturating_sub(1);
+        }
+    }
+
+    fn move_right(&mut self) {
+        if self.cursor_position.x < self.document.rows[self.cursor_position.y].len() {
+            self.cursor_position.x = self.cursor_position.x.saturating_add(1);
+        } else if self.cursor_position.y < self.document.rows.len() - 1 {
+            self.cursor_position.y = self.cursor_position.y.saturating_add(1);
+            self.cursor_position.x = DEFAULT_X_POSITION;
+        }
     }
 
     fn next_key(&self) -> Result<Key, io::Error> {
