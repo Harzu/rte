@@ -1,4 +1,5 @@
 mod editor;
+mod document;
 
 use clap::{Command, Arg};
 
@@ -16,7 +17,8 @@ fn main() {
         )
         .get_matches();
     
-    let _file_path = matches.get_one::<String>(FILE_PATH_ARG).unwrap();
-    let mut editor = editor::Editor::new().unwrap();
+    let file_path = matches.get_one::<String>(FILE_PATH_ARG).unwrap();
+    let document = document::Document::new(file_path).unwrap();
+    let mut editor = editor::Editor::new(document).unwrap();
     editor.run().unwrap();
 }
