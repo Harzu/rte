@@ -90,11 +90,24 @@ impl Editor {
             if let Some(row) = self.document.rows.get(
                 self.screen_offset.y.saturating_add(row_num as usize)
             ) {
-                println!("{}\r", row);
+                self.render_row(row);
             } else {
                 println!("\r");
             }
         }
+    }
+
+    fn render_row(&self, row: &str) {
+        let start = self.screen_offset.x;
+        let end = start.saturating_add(self.screen_size.width as usize);
+
+        let render_target: String = row
+            .chars()
+            .skip(start)
+            .take(end - start)
+            .collect();
+
+        println!("{}\r", render_target);
     }
 
     fn render_status_bar(&self) {
@@ -173,6 +186,15 @@ impl Editor {
         } else if self.cursor_position.y >= self.screen_offset.y.saturating_add(height) {
             self.screen_offset.y = self.cursor_position.y
                 .saturating_sub(height)    
+                .saturating_add(1);
+        }
+
+        let width = self.screen_size.width as usize;
+        if self.cursor_position.x < self.screen_offset.x {
+            self.screen_offset.x = self.cursor_position.x;
+        } else if self.cursor_position.x >= self.screen_offset.x.saturating_add(width) {
+            self.screen_offset.x = self.cursor_position.x
+                .saturating_sub(width)
                 .saturating_add(1);
         }
     }
