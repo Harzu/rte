@@ -11,6 +11,7 @@ use termion::{
 
 use crate::document::Document;
 
+const NEW_LINE_CHARACTER: char = '\n';
 const EXIT_CHARACTER: char = 'q';
 const PADDING_BUTTOM: u16 = 2;
 const INFO_MESSAGE: &str = "CTRL-Q = exit";
@@ -18,6 +19,7 @@ const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
 const DEFAULT_X_POSITION: usize = usize::MIN;
 const DEFAULT_Y_POSITION: usize = usize::MIN;
+
 struct ScreenSize {
     width: u16,
     height: u16,
@@ -130,7 +132,8 @@ impl Editor {
     fn process_key(&mut self) -> Result<(), io::Error> {
         match self.next_key()? {
             Key::Ctrl(EXIT_CHARACTER) => { self.exit = true; },
-            Key::Char(c) => { println!("your input: {}\r", c); },
+            Key::Char(c) => self.add_char(c),
+            Key::Backspace => self.remove_char(),
             Key::Up => self.move_up(),
             Key::Down => self.move_down(),
             Key::Left => self.move_left(),
@@ -141,6 +144,34 @@ impl Editor {
         Ok(())
     }
 
+    fn add_char(&mut self, c: char) {
+        let row = &mut self.document.rows[self.cursor_position.y];
+        if c == NEW_LINE_CHARACTER {
+            let new_row = row.split_off(self.cursor_position.x);
+            self.document.rows.insert(self.cursor_position.y.saturating_add(1), new_row);
+        } else {
+            row.insert(self.cursor_position.x, c);
+        }
+        
+        self.move_right();
+    }
+    
+    fn remove_char(&mut self) {
+        if self.cursor_position.x > DEFAULT_X_POSITION {
+            let prev_index = self.cursor_position.x.saturating_sub(1);
+            self.document.rows[self.cursor_position.y].remove(prev_index);
+            self.move_left();
+        } else if self.cursor_position.y > DEFAULT_Y_POSITION {
+            let prev_index = self.cursor_position.y.saturating_sub(1);
+            let curr_index = self.cursor_position.y;
+            let curr_row = self.document.rows[curr_index].clone();
+            
+            self.move_left();
+            self.document.rows[prev_index].push_str(&curr_row);
+            self.document.rows.remove(curr_index);
+        }
+    }
+    
     fn move_up(&mut self) {
         self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
 
