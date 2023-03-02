@@ -199,7 +199,7 @@ impl Editor {
     }
 
     fn move_down(&mut self) {
-        if self.cursor_position.y < self.document.rows.len() - 1 {
+        if self.cursor_position.y < self.document.len() - 1 {
             self.cursor_position.y = self.cursor_position.y.saturating_add(1);
 
             let row_len = self.document.get_row(self.cursor_position.y).len();
@@ -223,7 +223,7 @@ impl Editor {
     fn move_right(&mut self) {
         if self.cursor_position.x < self.document.get_row(self.cursor_position.y).len() {
             self.cursor_position.x = self.cursor_position.x.saturating_add(1);
-        } else if self.cursor_position.y < self.document.rows.len() - 1 {
+        } else if self.cursor_position.y < self.document.len() - 1 {
             self.cursor_position.y = self.cursor_position.y.saturating_add(1);
             self.cursor_position.x = DEFAULT_X_POSITION;
         }

@@ -7,7 +7,7 @@ use std::{
 const NEW_LINE_CHARACTER: char = '\n';
 
 pub struct Document {
-    pub rows: Vec<String>,
+    rows: Vec<String>,
     pub file_path: String,
     pub is_modified: bool,
 }
@@ -57,6 +57,10 @@ impl Document {
         file.flush()?;
         self.is_modified = false;
         Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.rows.len()
     }
 
     pub fn get_row(&self, row_num: usize) -> &String {
