@@ -118,11 +118,19 @@ impl Editor {
         print!("{}\r", String::from(INFO_MESSAGE));
     }
 
-    fn process_event(&mut self) -> Result<(), Box<dyn error::Error>> {
-        match self.terminal.pull_event()? {
-            TerminalEvent::Input(input_event) => self.process_input_event(input_event)?,
-            TerminalEvent::Syscall(syscall_event) => self.process_syscall_event(&syscall_event)?,
-            TerminalEvent::Empty => (),
+    fn process_key(&mut self) -> Result<(), io::Error> {
+        match Terminal::next_key()? {
+            KeyEvent::Ctrl(EXIT_CHARACTER) => {
+                self.exit = true;
+            }
+            KeyEvent::Ctrl(SAVE_CHARACTER) => self.document.save()?,
+            KeyEvent::Char(c) => self.add_char(c),
+            KeyEvent::Backspace => self.remove_char(),
+            KeyEvent::Up => self.move_up(),
+            KeyEvent::Down => self.move_down(),
+            KeyEvent::Left => self.move_left(),
+            KeyEvent::Right => self.move_right(),
+            _ => (),
         }
         Ok(())
     }
