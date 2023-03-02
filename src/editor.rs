@@ -6,15 +6,15 @@ use termion::{
     color,
     event::Key,
     input::TermRead,
-    raw::{RawTerminal, IntoRawMode}
+    raw::{IntoRawMode, RawTerminal},
 };
 
 use crate::document::Document;
 
-const NEW_LINE_CHARACTER: char = '\n';
 const EXIT_CHARACTER: char = 'q';
+const SAVE_CHARACTER: char = 's';
 const PADDING_BUTTOM: u16 = 2;
-const INFO_MESSAGE: &str = "CTRL-Q = exit";
+const INFO_MESSAGE: &str = "CTRL-Q = exit | CTRL-S = save";
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
 const DEFAULT_X_POSITION: usize = usize::MIN;
@@ -49,12 +49,15 @@ pub struct Editor {
 impl Editor {
     pub fn new(document: Document) -> Result<Self, io::Error> {
         let (width, height) = termion::terminal_size()?;
-        
+
         Ok(Editor {
             exit: false,
             stdout: io::stdout().into_raw_mode()?,
             document,
-            screen_size: ScreenSize { width, height: height.saturating_sub(PADDING_BUTTOM) },
+            screen_size: ScreenSize {
+                width,
+                height: height.saturating_sub(PADDING_BUTTOM),
+            },
             cursor_position: Position::default(),
             screen_offset: Position::default(),
         })
@@ -77,10 +80,19 @@ impl Editor {
         self.render_rows();
         self.render_status_bar();
 
-        print!("{}", termion::cursor::Goto(
-            self.cursor_position.x.saturating_sub(self.screen_offset.x).saturating_add(1) as u16,
-            self.cursor_position.y.saturating_sub(self.screen_offset.y).saturating_add(1) as u16,
-        ));
+        print!(
+            "{}",
+            termion::cursor::Goto(
+                self.cursor_position
+                    .x
+                    .saturating_sub(self.screen_offset.x)
+                    .saturating_add(1) as u16,
+                self.cursor_position
+                    .y
+                    .saturating_sub(self.screen_offset.y)
+                    .saturating_add(1) as u16,
+            )
+        );
         print!("{}", termion::cursor::Show);
 
         self.stdout.flush()
@@ -89,9 +101,10 @@ impl Editor {
     fn render_rows(&self) {
         for row_num in 0..self.screen_size.height {
             print!("{}", termion::clear::CurrentLine);
-            if let Some(row) = self.document.rows.get(
-                self.screen_offset.y.saturating_add(row_num as usize)
-            ) {
+            if let Some(row) = self
+                .document
+                .try_get_row(self.screen_offset.y.saturating_add(row_num as usize))
+            {
                 self.render_row(row);
             } else {
                 println!("\r");
@@ -103,11 +116,7 @@ impl Editor {
         let start = self.screen_offset.x;
         let end = start.saturating_add(self.screen_size.width as usize);
 
-        let render_target: String = row
-            .chars()
-            .skip(start)
-            .take(end - start)
-            .collect();
+        let render_target: String = row.chars().skip(start).take(end - start).collect();
 
         println!("{}\r", render_target);
     }
@@ -115,13 +124,27 @@ impl Editor {
     fn render_status_bar(&self) {
         print!("{}", termion::clear::CurrentLine);
 
-        let status_message = format!("cursor {}", self.cursor_position);
+        let mut document_is_modified_flag = "";
+        if self.document.is_modified {
+            document_is_modified_flag = "[+] "
+        }
+
+        let status_message = format!(
+            "{}{} {}",
+            document_is_modified_flag, self.document.file_path, self.cursor_position
+        );
         let end_spaces = " ".repeat(
-            self.screen_size.width.saturating_sub(status_message.len() as u16) as usize
+            self.screen_size
+                .width
+                .saturating_sub(status_message.len() as u16) as usize,
         );
         let status = format!("{}{}", status_message, end_spaces);
 
-        print!("{}{}", color::Bg(STATUS_BG_COLOR), color::Fg(STATUS_FG_COLOR));
+        print!(
+            "{}{}",
+            color::Bg(STATUS_BG_COLOR),
+            color::Fg(STATUS_FG_COLOR)
+        );
         println!("{}\r", status);
         print!("{}{}", color::Bg(color::Reset), color::Fg(color::Reset));
 
@@ -131,51 +154,45 @@ impl Editor {
 
     fn process_key(&mut self) -> Result<(), io::Error> {
         match self.next_key()? {
-            Key::Ctrl(EXIT_CHARACTER) => { self.exit = true; },
+            Key::Ctrl(EXIT_CHARACTER) => {
+                self.exit = true;
+            }
+            Key::Ctrl(SAVE_CHARACTER) => self.document.save()?,
             Key::Char(c) => self.add_char(c),
             Key::Backspace => self.remove_char(),
             Key::Up => self.move_up(),
             Key::Down => self.move_down(),
             Key::Left => self.move_left(),
             Key::Right => self.move_right(),
-            _ => ()
+            _ => (),
         }
 
         Ok(())
     }
 
     fn add_char(&mut self, c: char) {
-        let row = &mut self.document.rows[self.cursor_position.y];
-        if c == NEW_LINE_CHARACTER {
-            let new_row = row.split_off(self.cursor_position.x);
-            self.document.rows.insert(self.cursor_position.y.saturating_add(1), new_row);
-        } else {
-            row.insert(self.cursor_position.x, c);
-        }
-        
+        self.document
+            .insert_char(self.cursor_position.y, self.cursor_position.x, c);
         self.move_right();
     }
-    
+
     fn remove_char(&mut self) {
         if self.cursor_position.x > DEFAULT_X_POSITION {
             let prev_index = self.cursor_position.x.saturating_sub(1);
-            self.document.rows[self.cursor_position.y].remove(prev_index);
+            self.document
+                .remove_char(self.cursor_position.y, prev_index);
             self.move_left();
         } else if self.cursor_position.y > DEFAULT_Y_POSITION {
-            let prev_index = self.cursor_position.y.saturating_sub(1);
-            let curr_index = self.cursor_position.y;
-            let curr_row = self.document.rows[curr_index].clone();
-            
+            let current_row_num = self.cursor_position.y;
             self.move_left();
-            self.document.rows[prev_index].push_str(&curr_row);
-            self.document.rows.remove(curr_index);
+            self.document.join_row_with_previous(current_row_num);
         }
     }
-    
+
     fn move_up(&mut self) {
         self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
 
-        let row_len = self.document.rows[self.cursor_position.y].len();
+        let row_len = self.document.get_row(self.cursor_position.y).len();
         if self.cursor_position.x > row_len {
             self.cursor_position.x = row_len;
         }
@@ -185,7 +202,7 @@ impl Editor {
         if self.cursor_position.y < self.document.rows.len() - 1 {
             self.cursor_position.y = self.cursor_position.y.saturating_add(1);
 
-            let row_len = self.document.rows[self.cursor_position.y].len();
+            let row_len = self.document.get_row(self.cursor_position.y).len();
             if self.cursor_position.x > row_len {
                 self.cursor_position.x = row_len;
             }
@@ -193,16 +210,18 @@ impl Editor {
     }
 
     fn move_left(&mut self) {
-        if self.cursor_position.x == DEFAULT_X_POSITION && self.cursor_position.y != DEFAULT_Y_POSITION {
+        if self.cursor_position.x == DEFAULT_X_POSITION
+            && self.cursor_position.y != DEFAULT_Y_POSITION
+        {
             self.cursor_position.y = self.cursor_position.y.saturating_sub(1);
-            self.cursor_position.x = self.document.rows[self.cursor_position.y].len();
+            self.cursor_position.x = self.document.get_row(self.cursor_position.y).len();
         } else {
             self.cursor_position.x = self.cursor_position.x.saturating_sub(1);
         }
     }
 
     fn move_right(&mut self) {
-        if self.cursor_position.x < self.document.rows[self.cursor_position.y].len() {
+        if self.cursor_position.x < self.document.get_row(self.cursor_position.y).len() {
             self.cursor_position.x = self.cursor_position.x.saturating_add(1);
         } else if self.cursor_position.y < self.document.rows.len() - 1 {
             self.cursor_position.y = self.cursor_position.y.saturating_add(1);
@@ -215,8 +234,10 @@ impl Editor {
         if self.cursor_position.y < self.screen_offset.y {
             self.screen_offset.y = self.cursor_position.y;
         } else if self.cursor_position.y >= self.screen_offset.y.saturating_add(height) {
-            self.screen_offset.y = self.cursor_position.y
-                .saturating_sub(height)    
+            self.screen_offset.y = self
+                .cursor_position
+                .y
+                .saturating_sub(height)
                 .saturating_add(1);
         }
 
@@ -224,7 +245,9 @@ impl Editor {
         if self.cursor_position.x < self.screen_offset.x {
             self.screen_offset.x = self.cursor_position.x;
         } else if self.cursor_position.x >= self.screen_offset.x.saturating_add(width) {
-            self.screen_offset.x = self.cursor_position.x
+            self.screen_offset.x = self
+                .cursor_position
+                .x
                 .saturating_sub(width)
                 .saturating_add(1);
         }
@@ -233,10 +256,8 @@ impl Editor {
     fn next_key(&self) -> Result<Key, io::Error> {
         match io::stdin().keys().next() {
             Some(key) => key,
-            None => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "invalid input"
-            ))
+            None => Err(io::Error::new(io::ErrorKind::Other, "invalid input")),
         }
     }
 }
+
