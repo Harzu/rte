@@ -1,11 +1,11 @@
-use std::{fmt, io};
+use std::fmt;
+use std::io;
+use std::error;
 use crate::{
     document::Document,
     terminal::{Terminal, KeyEvent},
 };
 
-const EXIT_CHARACTER: char = 'q';
-const SAVE_CHARACTER: char = 's';
 const INFO_MESSAGE: &str = "CTRL-Q = exit | CTRL-S = save";
 const STATUS_BG_COLOR: (u8, u8, u8) = (239, 239, 239);
 const STATUS_FG_COLOR: (u8, u8, u8) = (63, 63, 63);
@@ -43,13 +43,13 @@ impl Editor {
         }
     }
 
-    pub fn run(&mut self) -> Result<(), io::Error> {
+    pub fn run(&mut self) -> Result<(), Box<dyn error::Error>> {
+        self.render()?;
         while !self.exit {
-            self.change_offsets();
-            self.render()?;
             self.process_key()?;
+            self.render()?;
         }
-
+        self.terminal.flush()?;
         Ok(())
     }
 
@@ -57,6 +57,7 @@ impl Editor {
         Terminal::cursor_hide();
         Terminal::cursor_to_default_position();
 
+        self.change_offsets();
         self.render_rows();
         self.render_status_bar();
 
@@ -117,19 +118,17 @@ impl Editor {
         print!("{}\r", String::from(INFO_MESSAGE));
     }
 
-    fn process_key(&mut self) -> Result<(), io::Error> {
-        match Terminal::next_key()? {
-            KeyEvent::Ctrl(EXIT_CHARACTER) => {
-                self.exit = true;
-            }
-            KeyEvent::Ctrl(SAVE_CHARACTER) => self.document.save()?,
+    fn process_key(&mut self) -> Result<(), Box<dyn error::Error>> {
+        match self.terminal.pull_key_event()? {
+            KeyEvent::Exit => { self.exit = true; }
+            KeyEvent::SaveDocument => self.document.save()?,
             KeyEvent::Char(c) => self.add_char(c),
             KeyEvent::Backspace => self.remove_char(),
             KeyEvent::Up => self.move_up(),
             KeyEvent::Down => self.move_down(),
             KeyEvent::Left => self.move_left(),
             KeyEvent::Right => self.move_right(),
-            _ => (),
+            KeyEvent::Unsupported | KeyEvent::Empty => (),
         }
 
         Ok(())
