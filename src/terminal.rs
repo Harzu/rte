@@ -65,21 +65,27 @@ pub enum KeyEvent {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        self.input_event_handler
+        let input_handler_join_result = self.input_event_handler
             .join_handle
             .take()
-            .expect("InputHandler: join handler is not found")
+            .expect("join handler is not found")
             .join()
-            .expect("InputHandler: join thread operation is failed")
-            .unwrap();
+            .expect("join thread operation is failed");
 
-        self.syscall_signal_handler
+        if let Err(err) = input_handler_join_result {
+            log::error!("{}", err);
+        }
+
+        let syscall_handler_join_result = self.syscall_signal_handler
             .join_handle
             .take()
-            .expect("SyscallHandler: join handler is not found")
+            .expect("join handler is not found")
             .join()
-            .expect("SyscallHandler: join thread operation is failed")
-            .unwrap();
+            .expect("join thread operation is failed");
+
+        if let Err(err) = syscall_handler_join_result {
+            log::error!("{}", err);
+        }
     }
 }
 
