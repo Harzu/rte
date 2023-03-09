@@ -80,9 +80,8 @@ impl Document {
             let new_row = self.rows[row_num].split_off(index);
             self.rows.insert(row_num.saturating_add(1), new_row);
         } else {
-            self.rows[row_num].insert(index, c)
+            self.rows[row_num].insert(index, c);
         }
-
         self.is_modified = true;
     }
 
@@ -95,6 +94,6 @@ impl Document {
         let row = self.rows[row_num].clone();
         self.rows[row_num.saturating_sub(1)].push_str(&row);
         self.rows.remove(row_num);
-        self.is_modified = true
+        self.is_modified = true;
     }
 }
