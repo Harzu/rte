@@ -46,10 +46,10 @@ impl Editor {
     pub fn run(&mut self) -> Result<(), Box<dyn error::Error>> {
         self.render()?;
         while !self.exit {
-            self.process_event()?;
+            self.process_key()?;
             self.render()?;
         }
-        self.terminal.exit()?;
+        self.terminal.flush()?;
         Ok(())
     }
 
@@ -118,19 +118,17 @@ impl Editor {
         print!("{}\r", String::from(INFO_MESSAGE));
     }
 
-    fn process_key(&mut self) -> Result<(), io::Error> {
-        match Terminal::next_key()? {
-            KeyEvent::Ctrl(EXIT_CHARACTER) => {
-                self.exit = true;
-            }
-            KeyEvent::Ctrl(SAVE_CHARACTER) => self.document.save()?,
+    fn process_key(&mut self) -> Result<(), Box<dyn error::Error>> {
+        match self.terminal.pull_key_event()? {
+            KeyEvent::Exit => { self.exit = true; }
+            KeyEvent::SaveDocument => self.document.save()?,
             KeyEvent::Char(c) => self.add_char(c),
             KeyEvent::Backspace => self.remove_char(),
             KeyEvent::Up => self.move_up(),
             KeyEvent::Down => self.move_down(),
             KeyEvent::Left => self.move_left(),
             KeyEvent::Right => self.move_right(),
-            _ => (),
+            KeyEvent::Unsupported | KeyEvent::Empty => (),
         }
         Ok(())
     }
