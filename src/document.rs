@@ -1,8 +1,6 @@
-use std::{
-    fs::File,
-    io::{prelude::*, BufReader, LineWriter},
-    path::Path,
-};
+use std::fs::File;
+use std::io::{self, prelude::*, BufReader, LineWriter};
+use std::path::Path;
 
 const NEW_LINE_CHARACTER: char = '\n';
 
@@ -13,7 +11,7 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(file_path: &str) -> Result<Self, std::io::Error> {
+    pub fn new(file_path: &str) -> Result<Self, io::Error> {
         let mut document_rows = vec![];
         match File::open(Path::new(file_path)) {
             Ok(file) => {
@@ -41,7 +39,7 @@ impl Document {
         })
     }
 
-    pub fn save(&mut self) -> Result<(), std::io::Error> {
+    pub fn save(&mut self) -> Result<(), io::Error> {
         let file = File::create(&self.file_path)?;
         let mut file = LineWriter::new(file);
 
