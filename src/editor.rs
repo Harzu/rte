@@ -1,6 +1,6 @@
-use crate::{
-    document::Document,
-    terminal::{InputEvent, KeyEvent, SyscallEvent, Terminal, TerminalEvent},
+use crate::document::Document;
+use crate::terminal::{
+    InputEvent, KeyEvent, SyscallEvent, Terminal, TerminalEvent
 };
 use std::error;
 use std::fmt;
@@ -35,7 +35,7 @@ pub struct Editor {
 impl Editor {
     pub fn new(terminal: Terminal, document: Document) -> Self {
         Editor {
-            exit: false,
+            exit: bool::default(),
             terminal,
             document,
             cursor_position: Position::default(),
