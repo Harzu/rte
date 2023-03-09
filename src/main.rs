@@ -1,13 +1,21 @@
-mod editor;
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::cast_possible_truncation,
+    clippy::used_underscore_binding,
+    clippy::cast_sign_loss
+)]
+
 mod document;
+mod editor;
 mod terminal;
 
-use std::str::FromStr;
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use log::{debug, LevelFilter};
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use std::str::FromStr;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");

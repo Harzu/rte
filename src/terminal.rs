@@ -1,18 +1,16 @@
-use std::io::{self, Write};
-use std::error;
-use std::time::Duration;
-use std::thread::{self, JoinHandle};
-use crossbeam::channel::{unbounded, select, Receiver, RecvError};
+use crossbeam::channel::{select, unbounded, Receiver, RecvError};
 #[cfg(not(feature = "extended-siginfo"))]
 use signal_hook::consts::signal::SIGWINCH;
 use signal_hook::iterator::{Handle, Signals};
-use termion::{
-    color,
-    event::{Event, Key},
-    input::TermRead,
-    screen::AlternateScreen,
-    raw::{IntoRawMode, RawTerminal},
-};
+use std::error;
+use std::io::{self, Write};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
+use termion::color;
+use termion::event::{Event, Key};
+use termion::input::TermRead;
+use termion::raw::{IntoRawMode, RawTerminal};
+use termion::screen::AlternateScreen;
 
 const PADDING_BUTTON: u16 = 2;
 const EXIT_CHARACTER: char = 'q';
@@ -65,7 +63,8 @@ pub enum KeyEvent {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
-        let input_handler_join_result = self.input_event_handler
+        let input_handler_join_result = self
+            .input_event_handler
             .join_handle
             .take()
             .expect("join handler is not found")
@@ -76,7 +75,8 @@ impl Drop for Terminal {
             log::error!("{}", err);
         }
 
-        let syscall_handler_join_result = self.syscall_signal_handler
+        let syscall_handler_join_result = self
+            .syscall_signal_handler
             .join_handle
             .take()
             .expect("join handler is not found")
@@ -94,7 +94,10 @@ impl Terminal {
         let raw_stdout = io::stdout().into_raw_mode()?;
         let mut terminal = Terminal {
             stdout: AlternateScreen::from(raw_stdout),
-            size: ScreenSize { width: u16::MIN, height: u16::MIN },
+            size: ScreenSize {
+                width: u16::MIN,
+                height: u16::MIN,
+            },
             input_event_handler: InputEventHandler::new(),
             syscall_signal_handler: SyscallHandler::new()?,
         };
@@ -141,10 +144,10 @@ impl Terminal {
     }
 
     pub fn cursor_to_position(x: u16, y: u16) {
-        print!("{}", termion::cursor::Goto(
-            x.saturating_add(1),
-            y.saturating_add(1),
-        ));
+        print!(
+            "{}",
+            termion::cursor::Goto(x.saturating_add(1), y.saturating_add(1),)
+        );
     }
 
     pub fn clear_current_line() {
@@ -154,8 +157,16 @@ impl Terminal {
     pub fn set_row_color(background_rgb_color: (u8, u8, u8), foreground_rgb_color: (u8, u8, u8)) {
         print!(
             "{}{}",
-            color::Bg(color::Rgb(background_rgb_color.0, background_rgb_color.1, background_rgb_color.2)),
-            color::Fg(color::Rgb(foreground_rgb_color.0, foreground_rgb_color.1, foreground_rgb_color.2))
+            color::Bg(color::Rgb(
+                background_rgb_color.0,
+                background_rgb_color.1,
+                background_rgb_color.2
+            )),
+            color::Fg(color::Rgb(
+                foreground_rgb_color.0,
+                foreground_rgb_color.1,
+                foreground_rgb_color.2
+            ))
         );
     }
 
@@ -177,7 +188,7 @@ impl Terminal {
                         return Ok(TerminalEvent::Input(InputEvent::Key(KeyEvent::Exit)));
                     }
                 }
-        
+
                 if let Some(syscall_event_handle) = &self.syscall_signal_handler.join_handle {
                     if syscall_event_handle.is_finished() {
                         return Ok(TerminalEvent::Input(InputEvent::Key(KeyEvent::Exit)));
@@ -202,17 +213,17 @@ impl SyscallHandler {
         let mut signals = Signals::new([SIGWINCH])?;
         let signals_handle = signals.handle();
 
-        let join_handle = thread::spawn(move || -> Result<(), Box<dyn error::Error + Send + Sync>> {
-            for signal in signals.forever() {
-                let signal_event = match signal {
-                    SIGWINCH => SyscallEvent::WindowSizeChanged,
-                    _ => SyscallEvent::Unsupported,
-                };
-
-                syscall_event_sender.send(signal_event)?;
-            }
-            Ok(())
-        });
+        let join_handle =
+            thread::spawn(move || -> Result<(), Box<dyn error::Error + Send + Sync>> {
+                for signal in signals.forever() {
+                    let signal_event = match signal {
+                        SIGWINCH => SyscallEvent::WindowSizeChanged,
+                        _ => SyscallEvent::Unsupported,
+                    };
+                    syscall_event_sender.send(signal_event)?;
+                }
+                Ok(())
+            });
 
         Ok(SyscallHandler {
             join_handle: Some(join_handle),
@@ -230,16 +241,17 @@ struct InputEventHandler {
 impl InputEventHandler {
     fn new() -> Self {
         let (input_event_sender, input_event_receiver) = unbounded::<InputEvent>();
-        let join_handle = thread::spawn(move || -> Result<(), Box<dyn error::Error + Send + Sync>> {
-            loop {
-                let input_event = InputEventHandler::next_key()?;
-                input_event_sender.send(input_event.clone())?;
-                if let InputEvent::Key(KeyEvent::Exit) = input_event {
-                    break;
+        let join_handle =
+            thread::spawn(move || -> Result<(), Box<dyn error::Error + Send + Sync>> {
+                loop {
+                    let input_event = InputEventHandler::next_key()?;
+                    input_event_sender.send(input_event.clone())?;
+                    if let InputEvent::Key(KeyEvent::Exit) = input_event {
+                        break;
+                    }
                 }
-            }
-            Ok(())
-        });
+                Ok(())
+            });
 
         InputEventHandler {
             join_handle: Some(join_handle),
@@ -261,7 +273,7 @@ impl InputEventHandler {
                     Key::Ctrl(SAVE_CHARACTER) => Ok(InputEvent::Key(KeyEvent::SaveDocument)),
                     _ => Ok(InputEvent::Key(KeyEvent::Unsupported)),
                 },
-                _ => Ok(InputEvent::Unsupported)
+                _ => Ok(InputEvent::Unsupported),
             };
         }
 
