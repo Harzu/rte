@@ -63,6 +63,9 @@ pub enum KeyEvent {
 
 impl Drop for Terminal {
     fn drop(&mut self) {
+        self.syscall_signal_handler.signals_handle.close();
+        self.flush().unwrap();
+
         let input_handler_join_result = self
             .input_event_handler
             .join_handle
@@ -103,11 +106,6 @@ impl Terminal {
         };
         terminal.resize()?;
         Ok(terminal)
-    }
-
-    pub fn exit(&mut self) -> Result<(), io::Error> {
-        self.syscall_signal_handler.signals_handle.close();
-        self.flush()
     }
 
     pub fn flush(&mut self) -> Result<(), io::Error> {

@@ -23,11 +23,11 @@ impl Document {
                 } else {
                     document_rows.push(String::new());
                 }
-            }
+            },
             Err(e) => match e.kind() {
                 std::io::ErrorKind::NotFound => {
                     document_rows.push(String::new());
-                }
+                },
                 _ => return Err(e),
             },
         };

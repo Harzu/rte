@@ -1,7 +1,5 @@
 use crate::document::Document;
-use crate::terminal::{
-    InputEvent, KeyEvent, SyscallEvent, Terminal, TerminalEvent
-};
+use crate::terminal::{InputEvent, KeyEvent, SyscallEvent, Terminal, TerminalEvent};
 use std::error;
 use std::fmt;
 use std::io;
@@ -49,7 +47,6 @@ impl Editor {
             self.process_event()?;
             self.render()?;
         }
-        self.terminal.exit()?;
         Ok(())
     }
 
@@ -141,7 +138,7 @@ impl Editor {
                 KeyEvent::Char(c) => self.add_char(c),
                 KeyEvent::Exit => {
                     self.exit = true;
-                }
+                },
                 KeyEvent::SaveDocument => self.document.save()?,
                 KeyEvent::Backspace => self.remove_char(),
                 KeyEvent::Up => self.move_up(),

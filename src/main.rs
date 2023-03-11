@@ -1,10 +1,5 @@
 #![warn(clippy::all, clippy::pedantic)]
-#![allow(
-    clippy::module_name_repetitions,
-    clippy::cast_possible_truncation,
-    clippy::used_underscore_binding,
-    clippy::cast_sign_loss
-)]
+#![allow(clippy::module_name_repetitions, clippy::cast_possible_truncation)]
 
 mod document;
 mod editor;
