@@ -9,7 +9,7 @@ const NEW_LINE_CHARACTER: char = '\n';
 pub struct Document {
     rows: Vec<String>,
     pub file_path: String,
-    pub is_modified: bool,
+    is_modified: bool,
 }
 
 impl Document {
@@ -43,7 +43,7 @@ impl Document {
 
     pub fn save(&mut self) -> Result<(), std::io::Error> {
         let file = File::create(&self.file_path)?;
-        let mut file = LineWriter::new(file);
+        let mut writer = LineWriter::new(file);
 
         for (row_num, row_content) in self.rows.iter().enumerate() {
             let mut buf: Vec<u8> = row_content.bytes().collect();
@@ -51,12 +51,16 @@ impl Document {
                 buf.push(NEW_LINE_CHARACTER as u8);
             }
 
-            file.write_all(&buf[..])?;
+            writer.write_all(&buf[..])?;
         }
 
-        file.flush()?;
+        writer.flush()?;
         self.is_modified = false;
         Ok(())
+    }
+
+    pub fn is_modified(&self) -> bool {
+        self.is_modified
     }
 
     pub fn len(&self) -> usize {

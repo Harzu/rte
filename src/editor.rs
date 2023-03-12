@@ -125,7 +125,7 @@ impl Editor {
         print!("{}", termion::clear::CurrentLine);
 
         let mut document_is_modified_flag = "";
-        if self.document.is_modified {
+        if self.document.is_modified() {
             document_is_modified_flag = "[+] "
         }
 
