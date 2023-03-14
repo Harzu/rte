@@ -92,7 +92,7 @@ impl Editor {
         Terminal::clear_current_line();
 
         let mut document_is_modified_flag = "";
-        if self.document.is_modified {
+        if self.document.is_modified() {
             document_is_modified_flag = "[+] ";
         }
 
