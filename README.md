@@ -1,0 +1,1 @@
+# RTE - The simple text editor that is written in RUST
